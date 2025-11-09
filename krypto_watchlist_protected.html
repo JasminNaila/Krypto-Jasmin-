@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🔐 Krypto Watchlist – Passwort</title>
+<style>
+  :root { --bg:#0b0c10; --fg:#eaeaea; --muted:#9aa3af; --accent:#1f6feb; }
+  html,body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Roboto,Arial,sans-serif; background:var(--bg); color:var(--fg); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+  h1 { font-size:20px; margin:8px 0 12px; }
+  .meta { font-size:12px; opacity:.75; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:right; padding:10px 8px; border-bottom:1px solid rgba(255,255,255,.08); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align:left; }
+  .neg { color:#ff6b6b; } .pos { color:#5eea8b; }
+  .chip { display:inline-block; padding:2px 6px; border-radius:8px; background:rgba(255,255,255,.08); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input[type="number"], input[type="password"] { background:#121318; color:var(--fg); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px; }
+  input[type="password"] { width:220px; }
+  .btn { background:var(--accent); color:white; border:0; border-radius:10px; padding:10px 12px; font-weight:600; }
+  .foot { margin-top:14px; font-size:12px; opacity:.8; }
+  .sticky { position:sticky; bottom:0; backdrop-filter:blur(8px); background:rgba(11,12,16,.85); padding:10px 8px; }
+  .gate { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(0,0,0,.75), rgba(0,0,0,.9)); z-index:9999; }
+  .card { background:#0f1115; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:20px; width:min(92vw,420px); box-shadow:0 10px 30px rgba(0,0,0,.4); }
+  .card h2 { margin:0 0 6px; font-size:18px; }
+  .small { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <div class="card">
+    <h2>🔐 Geschützte Watchlist</h2>
+    <div class="small">Bitte Passwort eingeben, um dein Dashboard zu entsperren.</div>
+    <div style="height:10px"></div>
+    <form id="pwform">
+      <input id="pw" type="password" placeholder="Passwort" autocomplete="current-password" />
+      <button class="btn" type="submit">Öffnen</button>
+    </form>
+    <div id="msg" class="small" style="margin-top:8px;"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h1>📈 Deine Krypto-Watchlist (live)</h1>
+  <div class="meta">Kurse: CoinGecko • Aktualisiert alle 60s • Währung: <span class="chip">EUR & USD</span></div>
+
+  <div class="row small">
+    <div>QUBIC Preis-Override (USDT):</div>
+    <input id="qubicOverride" type="number" step="0.0000000001" placeholder="z.B. 0.0000009988">
+    <button class="btn" onclick="applyOverride()">Übernehmen</button>
+    <div id="overrideInfo" class="small"></div>
+  </div>
+
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>Asset</th>
+        <th>Menge</th>
+        <th>Kurs (EUR)</th>
+        <th>Kurs (USD)</th>
+        <th>Wert (EUR)</th>
+        <th>Wert (USD)</th>
+        <th>Invest (EUR)</th>
+        <th>PnL</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+    <tfoot>
+      <tr class="sticky">
+        <th>Gesamt</th>
+        <th></th><th></th><th></th>
+        <th id="tot_eur">—</th>
+        <th id="tot_usd">—</th>
+        <th id="tot_inv">—</th>
+        <th id="tot_pnl">—</th>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="foot">Stand: <span id="ts">–</span>. Diese Seite lädt Kurse automatisch, sobald eine Internetverbindung besteht.</div>
+</div>
+
+<script>
+// --- Password gate ---
+const PW_SHA256 = "7a816f6fe421ba1a5c0825c57fe28508d64d15b43270777c8eda30cb85c6fbde";
+const enc = new TextEncoder();
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(s));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+document.getElementById('pwform').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const v = document.getElementById('pw').value;
+  const h = await sha256Hex(v);
+  if (h === PW_SHA256) {
+    document.getElementById('gate').style.display = 'none';
+    render();
+  } else {
+    document.getElementById('msg').textContent = 'Falsches Passwort.';
+  }
+});
+
+// --- Portfolio logic ---
+const portfolio = [{"name": "Bitcoin", "symbol": "BTC", "amount": 0.01154981, "coingeckoId": "bitcoin", "invest_eur": 948.0}, {"name": "Kaspa", "symbol": "KAS", "amount": 435208.90286485, "coingeckoId": "kaspa", "invest_eur": 27262.35}, {"name": "Floki", "symbol": "FLOKI", "amount": 21279263.16730752, "coingeckoId": "floki", "invest_eur": 2379.66}, {"name": "Pepe", "symbol": "PEPE", "amount": 53760821.88980589, "coingeckoId": "pepe", "invest_eur": 507.5}, {"name": "Cronos", "symbol": "CRO", "amount": 10453.24453402, "coingeckoId": "cronos", "invest_eur": 2500.0}, {"name": "Qubic", "symbol": "QUBIC", "amount": 414905384.31498, "coingeckoId": "qubic", "invest_eur": null}];
+const ids = "bitcoin,cronos,floki,kaspa,pepe,qubic";
+let qubicOverride = null; // in USD
+
+function fmt(n, dec=2) { 
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return n.toLocaleString('de-DE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function clsPnL(v) { return v >= 0 ? 'pos' : 'neg'; }
+
+async function fetchRates() {
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur,usd`;
+  const r = await fetch(url);
+  const data = await r.json();
+  return data;
+}
+
+function rowHtml(a, px) {
+  const eur = px?.[a.coingeckoId]?.eur ?? null;
+  const usd = px?.[a.coingeckoId]?.usd ?? null;
+  const isQubic = a.symbol.toUpperCase() === "QUBIC";
+  const usdEff = isQubic && qubicOverride ? qubicOverride : usd;
+  const eurEff = usdEff && px?.["bitcoin"]?.eur && px?.["bitcoin"]?.usd 
+      ? usdEff * (px["bitcoin"].eur / px["bitcoin"].usd) : eur;
+  const valEur = eurEff ? a.amount * eurEff : null;
+  const valUsd = usdEff ? a.amount * usdEff : null;
+  let pnl = null;
+  if (a.invest_eur != null && valEur != null) pnl = valEur - a.invest_eur;
+  return {
+    tr: `<tr>
+      <td><strong>${a.name}</strong> <span class="chip">${a.symbol}</span></td>
+      <td>${fmt(a.amount, a.amount>1000?2:8)} </td>
+      <td>${eurEff ? '€ '+fmt(eurEff, eurEff<1?6:2) : '—'}</td>
+      <td>${usdEff ? '$ '+fmt(usdEff, usdEff<1?6:2) : '—'}</td>
+      <td>${valEur ? '€ '+fmt(valEur,2) : '—'}</td>
+      <td>${valUsd ? '$ '+fmt(valUsd,2) : '—'}</td>
+      <td>${a.invest_eur!=null ? '€ '+fmt(a.invest_eur,2) : '—'}</td>
+      <td class="${pnl!=null?clsPnL(pnl):''}">${pnl!=null ? ( (pnl>=0?'+':'') + '€ '+fmt(pnl,2) ) : '—'}</td>
+    </tr>`,
+    valEur, valUsd, invest: a.invest_eur ?? 0, pnl: pnl ?? 0
+  };
+}
+
+async function render() {
+  try {
+    const px = await fetchRates();
+    const tb = document.querySelector('#tbl tbody');
+    tb.innerHTML = '';
+    let totE=0, totU=0, totI=0, totP=0;
+    for (const a of portfolio) {
+      const r = rowHtml(a, px);
+      tb.insertAdjacentHTML('beforeend', r.tr);
+      if (r.valEur) totE += r.valEur;
+      if (r.valUsd) totU += r.valUsd;
+      totI += r.invest;
+      totP += r.pnl;
+    }
+    document.getElementById('tot_eur').textContent = '€ ' + fmt(totE,2);
+    document.getElementById('tot_usd').textContent = '$ ' + fmt(totU,2);
+    document.getElementById('tot_inv').textContent = '€ ' + fmt(totI,2);
+    const pnlEl = document.getElementById('tot_pnl');
+    pnlEl.textContent = (totP>=0?'+':'') + '€ ' + fmt(totP,2);
+    pnlEl.className = totP>=0 ? 'pos' : 'neg';
+    document.getElementById('ts').textContent = new Date().toLocaleString();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function applyOverride(){
+  const v = parseFloat(document.getElementById('qubicOverride').value);
+  if (!isNaN(v)) {
+    qubicOverride = v;
+    document.getElementById('overrideInfo').textContent = 'QUBIC-Preis manuell: $ '+fmt(v,10);
+    render();
+  }
+}
+</script>
+</body>
+</html>
